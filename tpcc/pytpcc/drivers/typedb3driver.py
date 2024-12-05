@@ -66,6 +66,10 @@ class Typedb3Driver(AbstractDriver):
         handler = logging.FileHandler('typedb_log.log')
         handler.setFormatter(logging.Formatter('%(asctime)s - %(message)s'))
         self.typedb_logger.addHandler(handler)
+ 
+        # Clear the log file
+        with open('typedb_log.log', 'w') as f:
+            f.write('')
     
     ## ----------------------------------------------
     ## makeDefaultConfig
@@ -393,7 +397,10 @@ class Typedb3Driver(AbstractDriver):
                 DATA_COUNT[tableName] = 0;
             DATA_COUNT[tableName] += len(tuples);
 
-            start_time = time.time()
+            if self.debug:
+                self.typedb_logger.debug(f"\n--- {len(tuples)} {tableName} ---\n {write_query[-1]}\n------\n")
+
+            start_time = time.time() # START
             promises = [ ]
             for q in write_query:
                 promises.append(tx.query(q))
@@ -401,7 +408,9 @@ class Typedb3Driver(AbstractDriver):
             for p in promises:
                 p.resolve()
             tx.commit()
-            logging.info(f"Wrote {len(tuples)} instances of {tableName} with TPQ: {(time.time() - start_time) / len(tuples)}")
+            stop_time = time.time() # STOP
+
+            logging.info(f"Wrote {len(tuples)} instances of {tableName} with TPQ: {(stop_time - start_time) / len(tuples)}")
         return
 
     ## ----------------------------------------------
@@ -467,6 +476,8 @@ class Typedb3Driver(AbstractDriver):
             all_local = all_local and i_w_ids[i] == w_id
 
         with self.driver.transaction(self.database, TransactionType.WRITE) as tx:
+            if self.debug:
+                self.typedb_logger.debug("NEW TRANSACTION: running doNewOrder")
             for i in range(len(i_ids)):
                 q = f"""
 match 
@@ -651,6 +662,8 @@ has OL_QUANTITY {ol_quantity}, has OL_AMOUNT {ol_amount}, has OL_DIST_INFO "{s_d
         ol_delivery_d = params["ol_delivery_d"].isoformat()[:-3]
 
         with self.driver.transaction(self.database, TransactionType.WRITE) as tx:
+            if self.debug:
+                self.typedb_logger.debug("NEW TRANSACTION: running doDelivery")
             result = [ ]
             for d_id in range(1, constants.DISTRICTS_PER_WAREHOUSE+1):
                 q = f"""
@@ -754,6 +767,8 @@ $ol has OL_DELIVERY_D {ol_delivery_d};
         assert w_id, pformat(params)
         assert d_id, pformat(params)
         with self.driver.transaction(self.database, TransactionType.WRITE) as tx:
+            if self.debug:
+                self.typedb_logger.debug("NEW TRANSACTION: running doOrderStatus")
             result = [ ]
             if c_id != None:
                 q = f"""
@@ -868,6 +883,8 @@ select $i_id, $ol_supply_w_id, $ol_quantity, $ol_amount, $ol_dist_info;"""
         h_date = params["h_date"].isoformat()[:-3]
 
         with self.driver.transaction(self.database, TransactionType.WRITE) as tx:
+            if self.debug:
+                self.typedb_logger.debug("NEW TRANSACTION: running doPayment")
             if c_id != None:
                 q = f"""
 match
@@ -1106,6 +1123,8 @@ $h links (customer: $c), isa CUSTOMER_HISTORY, has H_DATE {h_date}, has H_AMOUNT
         threshold = params["threshold"]
         
         with self.driver.transaction(self.database, TransactionType.WRITE) as tx:
+            if self.debug:
+                self.typedb_logger.debug("NEW TRANSACTION: running doStockLevel")
             q = f"""
 match
 $d isa DISTRICT, has D_ID {w_id * DPW + d_id}, has D_NEXT_O_ID $d_next_o_id;
